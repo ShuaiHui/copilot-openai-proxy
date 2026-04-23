@@ -72,6 +72,24 @@ npm install @github/copilot-sdk@0.2.2
 
 > ⚠️ node_modules 现在放在 skills 目录本身，不再是 `scripts/`。start.sh 通过 `cd "$SKILL_DIR"` 确保 ESM 解析路径正确。
 
+### 3.2 关键结论
+
+不要把 SDK 当成 `@github/copilot` 的子路径来引用。
+
+**错误写法：**
+
+```js
+import { CopilotClient, approveAll } from '@github/copilot/sdk'
+```
+
+**正确写法：**
+
+```js
+import { CopilotClient, approveAll } from '@github/copilot-sdk'
+```
+
+这是这套代理恢复可用的核心点。
+
 ---
 
 ## 4. 启动方式
@@ -385,7 +403,11 @@ openclaw doctor
 
 ## 10. 建议运维动作
 
-### 10.1 后台守护（已完成）
+### 10.1 日志观察
+
+建议把代理 stdout/stderr 重定向到单独日志文件。
+
+### 10.2 后台守护（已完成）
 
 当前已通过 launchd 常驻，无需手动补：
 
@@ -396,7 +418,7 @@ openclaw doctor
 
 详见 §4.2 / §4.3。
 
-### 10.2 模型扩容时的原则
+### 10.3 模型扩容时的原则
 
 新增模型时同步改三处：
 
@@ -458,9 +480,34 @@ openclaw doctor
 
 4. **watcher 只负责告警，不负责自动补跑当前 turn**
 
-目标：控制额外请求次数，避免脏状态延续，让异常更容易排查。
+这套策略的目标不是“最大化自动自愈”，而是：
 
-### 11.2 旧方案安全备份
+- 控制额外请求次数
+- 避免把脏状态继续喂给模型
+- 让异常表现更容易排查
+
+### 11.2 与旧策略的取舍
+
+旧策略更偏向“自动自愈优先”，可能包含：
+
+- synthetic missing tool result continuation
+- close + recreate + replay current request
+- 更宽松的 silent-retry
+
+它的优点是：
+- 某些异常下用户体感更连续
+
+它的缺点是：
+- **不一定更省真实模型请求次数**
+- 更容易把脏状态继续延长
+- 排障更难，因为代理会在后台偷偷补动作
+
+所以当前默认结论是：
+
+- **最省人工重试次数**：旧策略有时更像
+- **更稳、更可控**：零自动重放优先更合适
+
+### 11.3 旧方案安全备份
 
 本次改造前的恢复链路已单独备份：
 

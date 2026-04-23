@@ -16,6 +16,7 @@ export function getHeaderValue(req, name) {
 export function getSessionKey(req, body) {
   return getHeaderValue(req, 'x-copilot-session-key')
     || getHeaderValue(req, 'x-openclaw-session-key')
+    || getHeaderValue(req, 'x-openclaw-session-id')  // fallback: OpenClaw native session UUID
     || body.session_key
     || body.sessionKey
     || null;

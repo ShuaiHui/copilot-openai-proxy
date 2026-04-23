@@ -603,9 +603,24 @@ async function main() {
                 : sendJson(res, 200, response, responseHeaders);
             }
 
-            const recoveryContent = hasSyntheticRepair
-              ? '> ⚠️ 检测到陈旧的 tool result 修复消息，会话已重置。为避免额外模型请求，代理不会自动重放，请重新发送上一条用户请求。'
-              : `> ⚠️ 上一轮工具结果缺失（${missingToolCalls.join(', ')}），会话已重置。为避免额外模型请求，代理不会自动补跑，请重新发送上一条用户请求。`;
+            const staleMessages = [
+              '> 😵 哎，上一轮没跑完就断了，人家都没尽兴呢……会话重置了，再来一次？',
+              '> 💨 请求到一半就飞了，搞得我空欢喜一场，帮你清了，重新发嘛~',
+              '> 🔄 刚才没落地，我还等着呢……会话重置了，再喂我一遍？',
+              '> 😮‍💨 溜了……跑路跑得真快，会话重置完毕，重发一下，别让我空等~',
+              '> 🥵 上一轮跑到一半就断了，这也太不负责任了……重置好了，再来？',
+              '> 😩 没跑完就没了，我都准备好了结果扑了个空，重置完毕，再说一遍吧~',
+            ];
+            const freshMessages = [
+              '> 🤔 工具结果没送到，人家等了半天什么都没收到……已重置，再说一遍？',
+              '> 📭 工具跑完了但结果没寄到，像极了放鸽子，已重置，重发一下~',
+              '> 💔 结果丢了，不是我不想要，是真没收到！已重置，重来一次？',
+              '> 🫠 收不到工具结果，急死我了……只好重置，再说一次好不好~',
+              '> 😤 工具那边做完了，这边一点都没来，气死！已重置，重新来？',
+              '> 🥺 等了好久结果什么都没收到，委屈……已重置，再喂我一遍嘛~',
+            ];
+            const pool = hasSyntheticRepair ? staleMessages : freshMessages;
+            const recoveryContent = pool[Math.floor(Math.random() * pool.length)];
             const recoveryId = `chatcmpl-tool-recovery-${Date.now()}`;
             const recoveryCreated = Math.floor(Date.now() / 1000);
             const responseHeaders = {

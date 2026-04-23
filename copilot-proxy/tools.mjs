@@ -105,32 +105,6 @@ export function isSyntheticToolRepairMessage(message) {
     || text.includes('tool result unavailable after restart');
 }
 
-export function shouldAutoRecoverMissingToolResults() {
-  const raw = String(process.env.COPILOT_AUTO_RECOVER_MISSING_TOOL_RESULTS ?? '1').toLowerCase();
-  return !['0', 'false', 'no', 'off'].includes(raw);
-}
-
-export function buildSyntheticMissingToolResult(pending, message = null) {
-  const details = message ? normalizeToolResultMessage(message) : null;
-  const payload = {
-    ok: false,
-    interrupted: true,
-    tool: pending?.name ?? 'tool',
-    toolCallId: pending?.id ?? null,
-    error: 'OpenClaw tool result was unavailable before it could be delivered back to Copilot. '
-      + 'This usually means the OpenClaw gateway restarted, repaired session history, or otherwise lost the in-flight tool result.',
-    details: details || null,
-  };
-  return JSON.stringify(payload, null, 2);
-}
-
-export function shouldRestartSessionAfterSyntheticToolRepair(toolMessages, missingToolCalls) {
-  if (!shouldAutoRecoverMissingToolResults()) return false;
-  if (!Array.isArray(missingToolCalls) || missingToolCalls.length === 0) return false;
-  if (!Array.isArray(toolMessages) || toolMessages.length === 0) return false;
-  return toolMessages.some((message) => isSyntheticToolRepairMessage(message));
-}
-
 export function shouldSilentlyIgnoreStaleToolRepairRequest(messages, toolMessages) {
   if (!Array.isArray(toolMessages) || toolMessages.length === 0) return false;
 
