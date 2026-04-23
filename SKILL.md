@@ -33,13 +33,16 @@ OpenClaw → providers.cli-proxy → /v1/chat/completions → copilot-openai-pro
 copilot-proxy/
 ├── index.mjs     # 入口 + HTTP server + silent-retry 逻辑
 ├── config.mjs    # DEFAULTS + parseArgs
-├── events.mjs    # logProxyEvent + turn 事件队列
+├── errors.mjs    # 统一错误响应构建（badRequest / notFound / payloadTooLarge / serverError）
+├── logger.mjs    # 结构化 JSON 日志（LOG_LEVEL 控制，info→stdout / warn+error→stderr）
+├── events.mjs    # logProxyEvent（内部调用 logger）+ turn 事件队列
 ├── messages.mjs  # 消息解析 + prompt 构建
 ├── image.mjs     # 图片附件处理
 ├── tools.mjs     # tool call 处理
 ├── timeout.mjs   # sendWithActivityTimeout + shutdown metrics
 ├── session.mjs   # buildClient + makeSessionConfig + buildResponse
-└── metrics.mjs   # 请求计数 / 延迟 / token 统计，供 /metrics 端点使用
+├── metrics.mjs   # 请求计数 / 延迟统计，供 /metrics 端点使用
+└── db.mjs        # SQLite 持久化请求日志（~/.openclaw/logs/copilot-proxy.db）
 ```
 
 旧单文件（备份，可删）：
@@ -126,11 +129,10 @@ launchctl kickstart -k gui/$(id -u)/ai.openclaw.copilot-openai-proxy
 --turn-event-timeout-ms 180000       # 默认 180 秒；工具执行中有心跳推送，可适当调大
 ```
 
-**内置超时常量（不可通过 CLI 覆盖）：**
+**不可通过 CLI 覆盖的常量：**
 
 | 常量 | 值 | 说明 |
 |---|---|---|
-| `turnEventTimeoutMs` | 180 s | turn 事件超时；工具执行时心跳刷新，长任务不易误触 |
 | `timeoutFallbackModel` | `gpt-5.4` | 超时恢复时自动切换到此模型 |
 
 ---
@@ -185,7 +187,21 @@ GET /metrics
 | `models.<id>.avgLatencyMs` | 该模型平均响应时间（ms） |
 
 
-### 5.5 调试接口
+### 5.5 请求日志查询
+
+```http
+GET /v1/logs
+```
+
+Query params：`limit`（默认 100，上限 500）、`model`、`status`（completed/timeout/error）、`since`（epoch ms）
+
+```http
+GET /v1/logs/stats
+```
+
+Query params：`days`（默认 7）。返回按模型分组的请求统计摘要。
+
+### 5.6 调试接口
 
 ```http
 GET    /debug/sessions
@@ -410,14 +426,16 @@ openclaw doctor
 
 ## 11. 当前状态基线
 
-**最后更新：2026-04-23**
+**最后更新：2026-04-23（日志结构化 + fallback 清理）**
 
 架构：
-- 模块化 ESM（9 个 .mjs 文件）
+- 模块化 ESM（12 个 .mjs 文件，含 errors.mjs 统一错误规范）
 - launchd 常驻 + watcher
 - metrics.mjs 请求统计（token 计数已移除，改走 console.debug，/metrics 不再暴露 token 字段）
+- 结构化 JSON 日志（`logger.mjs`，`LOG_LEVEL` 环境变量控制粒度）
+- SQLite 持久化请求记录（`db.mjs`，存 `~/.openclaw/logs/copilot-proxy.db`）
 - 静默重试（超时 + headers 未发时自动重建 session 重跑一次）
-- 死代码清理：移除 timeout.mjs 中旧函数 `sendAndWaitNoTimeout`，统一使用 `sendWithActivityTimeout`
+- 死代码清理：移除 `fallback.mjs` / `fallbacks.json`（未接入的孤儿模块，上游 OpenClaw 已有 fallback 链）；移除 timeout.mjs 中旧函数 `sendAndWaitNoTimeout`，统一使用 `sendWithActivityTimeout`
 
 已验证正常：
 
@@ -425,6 +443,8 @@ openclaw doctor
 - `/v1/models` ✅
 - `/v1/chat/completions` ✅
 - `/metrics` ✅
+- `/v1/logs` ✅
+- `/v1/logs/stats` ✅
 - 语法检查全 OK ✅
 
 已注册模型（OpenClaw）：

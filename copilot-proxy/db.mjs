@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { logger } from './logger.mjs';
 
 const DB_DIR = path.join(os.homedir(), '.openclaw', 'logs');
 const DB_PATH = path.join(DB_DIR, 'copilot-proxy.db');
@@ -33,9 +34,9 @@ export function initDb() {
       CREATE INDEX IF NOT EXISTS idx_model ON requests(model);
       CREATE INDEX IF NOT EXISTS idx_status ON requests(status);
     `);
-    console.error(`[db] SQLite log initialized: ${DB_PATH}`);
+    logger.info('db:init', { path: DB_PATH });
   } catch (err) {
-    console.error('[db] Failed to init SQLite:', err.message);
+    logger.error('db:init_failed', { message: err.message });
     db = null;
   }
 }
@@ -56,7 +57,7 @@ export function logRequest({ model, status, latencyMs = null }) {
       'INSERT INTO requests (ts, model, status, latency_ms, tokens_prompt, tokens_completion) VALUES (?, ?, ?, ?, 0, 0)'
     ).run(Date.now(), model, status, latencyMs ?? null);
   } catch (err) {
-    console.error('[db] Failed to log request:', err.message);
+    logger.warn('db:log_request_failed', { message: err.message });
   }
 }
 
@@ -82,7 +83,7 @@ export function queryLogs({ limit = 100, model = null, status = null, since = nu
     params.push(cap);
     return db.prepare(sql).all(...params);
   } catch (err) {
-    console.error('[db] Failed to query logs:', err.message);
+    logger.error('db:query_logs_failed', { message: err.message });
     return [];
   }
 }
@@ -108,7 +109,7 @@ export function queryLogStats({ days = 7 } = {}) {
       ORDER BY total DESC
     `).all(since);
   } catch (err) {
-    console.error('[db] Failed to query stats:', err.message);
+    logger.error('db:query_stats_failed', { message: err.message });
     return [];
   }
 }

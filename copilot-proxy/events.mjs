@@ -1,7 +1,15 @@
 // events.mjs — logging helpers, deferred promises, turn event queue
+import { logger, inferLevel } from './logger.mjs';
 
-export function logProxyEvent(kind, payload) {
-  console.log(`[proxy:${kind}] ${JSON.stringify(payload)}`);
+/**
+ * Log a proxy event as structured JSON.
+ * @param {string} kind   - event kind, e.g. 'request', 'turn_error'
+ * @param {object} payload
+ * @param {string} [level] - 'debug'|'info'|'warn'|'error' (auto-inferred from kind when omitted)
+ */
+export function logProxyEvent(kind, payload, level) {
+  const resolvedLevel = level ?? inferLevel(kind);
+  logger[resolvedLevel](`proxy:${kind}`, payload);
 }
 
 export function previewForLog(value, maxLength = 500) {

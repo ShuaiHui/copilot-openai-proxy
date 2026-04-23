@@ -97,13 +97,16 @@ curl http://127.0.0.1:3456/v1/models
 |------|------|
 | `copilot-proxy/index.mjs` | 代理入口 + HTTP server |
 | `copilot-proxy/config.mjs` | 参数默认值 + CLI 解析 |
+| `copilot-proxy/errors.mjs` | 统一错误响应构建（`badRequest/notFound/payloadTooLarge/serverError`） |
 | `copilot-proxy/session.mjs` | Session 生命周期管理 |
 | `copilot-proxy/messages.mjs` | 消息解析 + prompt 构建 |
 | `copilot-proxy/tools.mjs` | tool call 处理 |
 | `copilot-proxy/image.mjs` | 图片附件处理 |
 | `copilot-proxy/timeout.mjs` | 超时控制 + 工具心跳推送 |
-| `copilot-proxy/events.mjs` | turn 事件队列 |
-| `copilot-proxy/metrics.mjs` | 请求计数 / 延迟统计，供 `/metrics` 端点使用（token 只走 console.debug，不在 metrics 里暴露） |
+| `copilot-proxy/events.mjs` | turn 事件队列（内部调用 logger） |
+| `copilot-proxy/logger.mjs` | 结构化 JSON 日志，`LOG_LEVEL` 控制粒度，info→stdout / warn+error→stderr |
+| `copilot-proxy/db.mjs` | SQLite 持久化请求记录（`~/.openclaw/logs/copilot-proxy.db`） |
+| `copilot-proxy/metrics.mjs` | 请求计数 / 延迟统计，供 `/metrics` 端点使用 |
 | `daemon/start.sh` | 启动脚本源模板（launchd 实际用 `~/.openclaw/bin/start-copilot-openai-proxy.sh`） |
 | `daemon/watch.sh` | watcher 脚本源模板（launchd 实际用 `~/.openclaw/bin/copilot-openai-proxy-watch.sh`） |
 | `daemon/healthcheck.sh` | 单次健康检查脚本 |

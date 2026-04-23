@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import { DEFAULTS, DEFAULT_COPILOT_BUILT_IN_TOOLS, nowMs } from './config.mjs';
 import { createDeferred, queueTurnEvent } from './events.mjs';
+import { logger } from './logger.mjs';
 import { buildCopilotToolsFromOpenAITools, buildExcludedCopilotTools, toolCallsSnapshot } from './tools.mjs';
 
 // ── CopilotClient ─────────────────────────────────────────────────────────────
@@ -92,13 +93,6 @@ export function makeSessionConfig(model, cwd, entry, clientTools = [], systemMes
 // ── Response building ─────────────────────────────────────────────────────────
 // Token counts are not meaningful for GitHub Copilot (billed per request, not per token).
 // We log them as debug info only; the response usage field is always zeroed.
-function debugLogTokenUsage(model, sessionKey, exactUsage, liveUsage) {
-  const input = exactUsage?.inputTokens ?? liveUsage?.inputTokens ?? null;
-  const output = exactUsage?.outputTokens ?? liveUsage?.outputTokens ?? null;
-  if (input != null || output != null) {
-    console.debug('[proxy:token_debug]', JSON.stringify({ model, sessionKey, input, output, source: exactUsage ? 'session.shutdown' : 'assistant.message' }));
-  }
-}
 
 export function buildResponse({
   model,
@@ -116,8 +110,13 @@ export function buildResponse({
   const modelMetrics = metrics?.shutdown?.modelMetrics?.[model];
   const exactUsage = modelMetrics?.usage ?? null;
 
-  // Log token info for debugging only — not used for billing
-  if (status === 'completed') debugLogTokenUsage(model, sessionKey, exactUsage, liveUsage);
+  if (status === 'completed') {
+    const input = exactUsage?.inputTokens ?? liveUsage?.inputTokens ?? null;
+    const output = exactUsage?.outputTokens ?? liveUsage?.outputTokens ?? null;
+    if (input != null || output != null) {
+      logger.debug('proxy:token_debug', { model, sessionKey, input, output, source: exactUsage ? 'session.shutdown' : 'assistant.message' });
+    }
+  }
 
   return {
     id: `chatcmpl-${crypto.randomUUID()}`,

@@ -1,8 +1,0 @@
-[
-  {
-    "name": "cli-proxy/gemini-3-flash-preview",
-    "baseUrl": "http://localhost:8317/v1",
-    "apiKey": "gemini-proxy-key-2026",
-    "model": "gemini-3-flash-preview"
-  }
-]

@@ -96,7 +96,10 @@ export async function sendWithActivityTimeout(session, options, entry, timeoutMs
       }
     } else if (event.type === 'assistant.message_delta') {
       const deltaContent = event.data?.deltaContent ?? '';
-      if (deltaContent) hadAssistantStreamDelta = true;
+      if (deltaContent) {
+        hadAssistantStreamDelta = true;
+        turnContent += deltaContent;
+      }
       if (deltaContent && entry.activeTurn) {
         queueTurnEvent(entry.activeTurn, { type: 'stream_delta', deltaContent });
       }

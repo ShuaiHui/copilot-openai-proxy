@@ -7,6 +7,7 @@ import process from 'node:process';
 
 import { DEFAULTS, DEFAULT_COPILOT_BUILT_IN_TOOLS, ASK_USER_PROMPT, parseArgs, printUsage, nowMs } from './config.mjs';
 import { logProxyEvent, queueTurnEvent, rejectTurnWaiters, waitForTurnEvent } from './events.mjs';
+import { logger } from './logger.mjs';
 import {
   getHeaderValue, getSessionKey, getMessageChannel, getOpenClawRouteHint,
   buildDefaultSessionKey, wantsNewSession,
@@ -37,6 +38,7 @@ import {
   buildClient, normalizeModelMap, normalizeReasoningEffort,
   makeSessionConfig, buildResponse, buildIgnoredToolRepairResponse,
 } from './session.mjs';
+import { badRequest, notFound, payloadTooLarge, serverError } from './errors.mjs';
 
 // ── HTTP response helpers ─────────────────────────────────────────────────────
 function sendJson(res, status, body, extraHeaders = {}) {
@@ -422,7 +424,7 @@ async function main() {
       if ((req.method === 'POST' || req.method === 'DELETE') && closeMatch) {
         const key = decodeURIComponent(closeMatch[1]);
         const entry = sessionMap.get(key);
-        if (!entry) return sendJson(res, 404, { error: { message: `Unknown session key: ${key}` } });
+        if (!entry) return sendJson(res, 404, notFound(`Unknown session key: ${key}`));
         const snapshot = sessionSnapshot(entry);
         await closeSessionEntry(entry, 'manual-close');
         return sendJson(res, 200, { ok: true, closed: snapshot });
@@ -473,7 +475,7 @@ async function main() {
         const forceAskUser = shouldForceAskUser(messages, clientTools);
 
         if (!messages.length) {
-          return sendJson(res, 400, { error: { message: 'messages is required', type: 'invalid_request_error' } });
+          return sendJson(res, 400, badRequest('messages is required', 'missing_field'));
         }
 
         const pendingSessionKey = getSessionKey(req, body);
@@ -488,7 +490,7 @@ async function main() {
 
         if (!modelMap.has(model)) await refreshModels(true);
         if (!modelMap.has(model)) {
-          return sendJson(res, 400, { error: { message: `Unknown Copilot model: ${model}`, type: 'invalid_request_error' } });
+          return sendJson(res, 400, badRequest(`Unknown Copilot model: ${model}`, 'unknown_model'));
         }
 
         const requestedSessionKey = getSessionKey(req, body);
@@ -535,9 +537,7 @@ async function main() {
             incomingToolMessages: toolMessages.map(describeToolMessageForLog),
           });
           if (!toolMessages.length) {
-            return sendJson(res, 400, {
-              error: { message: 'This session is waiting for tool results, but no role=tool messages were found in messages', type: 'invalid_request_error' },
-            });
+            return sendJson(res, 400, badRequest('This session is waiting for tool results, but no role=tool messages were found in messages', 'missing_tool_results'));
           }
 
           const resolvedById = new Map();
@@ -671,9 +671,7 @@ async function main() {
             }
           }
           if (!userReply) {
-            return sendJson(res, 400, {
-              error: { message: 'This session is waiting for ask_user input, but no user reply was found in messages', type: 'invalid_request_error' },
-            });
+            return sendJson(res, 400, badRequest('This session is waiting for ask_user input, but no user reply was found in messages', 'missing_user_reply'));
           }
           const pendingUserInput = entry.awaitingUserInput;
           entry.awaitingUserInput = null;
@@ -693,7 +691,7 @@ async function main() {
           if (!prompt.trim() && attachments.length) prompt = 'Please analyze the attached image(s).';
           if (!prompt.trim() && !attachments.length) {
             if (sessionKey.startsWith('ephemeral:')) await closeSessionEntry(entry, 'empty-prompt');
-            return sendJson(res, 400, { error: { message: 'Could not extract prompt text from messages', type: 'invalid_request_error' } });
+            return sendJson(res, 400, badRequest('Could not extract prompt text from messages', 'empty_prompt'));
           }
 
           const channelBehaviorInstruction = buildChannelBehaviorInstruction(messageChannel);
@@ -761,6 +759,12 @@ async function main() {
             }
             event = await nextEvent();
           }
+        } else {
+          // Aggregate stream deltas for non-streaming clients (like memory-lancedb-pro)
+          while (event.type === 'stream_delta') {
+            if (event.deltaContent) accumulatedContent += event.deltaContent;
+            event = await nextEvent();
+          }
         }
 
         while (event.type === 'partial_message') {
@@ -821,6 +825,11 @@ async function main() {
                 }
                 event = await nextEvent();
               }
+            } else {
+              while (event.type === 'stream_delta') {
+                if (event.deltaContent) accumulatedContent += event.deltaContent;
+                event = await nextEvent();
+              }
             }
             while (event.type === 'partial_message') {
               accumulatedContent = event.content;
@@ -855,7 +864,8 @@ async function main() {
         if (event.type === 'error') throw event.error;
 
         const final = event.final;
-        const messageContent = buildAssistantMessageContent(final?.data?.content ?? '', entry.activeTurn);
+        const finalText = final?.data?.content || accumulatedContent || '';
+        const messageContent = buildAssistantMessageContent(finalText, entry.activeTurn);
 
         if (sessionKey.startsWith('ephemeral:')) await closeSessionEntry(entry, 'ephemeral-complete');
 
@@ -923,7 +933,7 @@ async function main() {
         } } // end silent-retry loop
       }
 
-      return sendJson(res, 404, { error: { message: `Not found: ${req.method} ${req.url}`, type: 'not_found_error' } });
+      return sendJson(res, 404, notFound(`Not found: ${req.method} ${req.url}`));
 
     } catch (error) {
       const isTimeout = error?.code === 'TURN_EVENT_TIMEOUT' || error?.code === 'SEND_TIMEOUT';
@@ -963,9 +973,10 @@ async function main() {
 
       recordError(reqModel ?? 'unknown');
       if (error?.code === 'BODY_TOO_LARGE') {
-        return sendJson(res, 413, { error: { message: 'Request body exceeds 10 MB limit', type: 'invalid_request_error' } });
+        return sendJson(res, 413, payloadTooLarge('Request body exceeds 10 MB limit'));
       }
-      return sendJson(res, 500, { error: { message: error?.stack || String(error), type: 'server_error' } });
+      logger.error('proxy:request_error', { message: error?.message ?? String(error), stack: error?.stack ?? null });
+      return sendJson(res, 500, serverError(error));
     }
   });
 
@@ -979,11 +990,13 @@ async function main() {
   initDb();
 
   server.listen(opts.port, opts.host, () => {
-    console.log(`Copilot OpenAI proxy listening on http://${opts.host}:${opts.port}`);
-    console.log(`Default model: ${opts.defaultModel}`);
-    console.log(`CWD: ${opts.cwd}`);
-    console.log(`Session TTL: ${opts.sessionTtlMs}ms`);
-    console.log(`Send timeout: ${opts.sendTimeoutMs}ms`);
+    logger.info('proxy:startup', {
+      address: `http://${opts.host}:${opts.port}`,
+      defaultModel: opts.defaultModel,
+      cwd: opts.cwd,
+      sessionTtlMs: opts.sessionTtlMs,
+      sendTimeoutMs: opts.sendTimeoutMs,
+    });
   });
 
   const shutdown = async () => {
@@ -998,6 +1011,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error?.stack || String(error));
+  logger.error('proxy:fatal', { message: error?.message ?? String(error), stack: error?.stack ?? null });
   process.exit(1);
 });

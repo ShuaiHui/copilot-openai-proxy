@@ -111,6 +111,9 @@ Debug/session endpoints:
   GET    /debug/sessions
   POST   /debug/sessions/:key/close
   DELETE /debug/sessions/:key
+  GET    /metrics
+  GET    /v1/logs              query params: limit, model, status, since (epoch ms)
+  GET    /v1/logs/stats        query params: days (default 7)
 
 Optional request features:
   - Header x-copilot-session-key: reuse a live Copilot session across requests
