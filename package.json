@@ -1,0 +1,10 @@
+{
+  "name": "copilot-openai-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Copilot OpenAI-compatible proxy – modular source",
+  "main": "copilot-proxy/index.mjs",
+  "dependencies": {
+    "@github/copilot-sdk": "^0.2.2"
+  }
+}
