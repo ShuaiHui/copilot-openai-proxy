@@ -25,7 +25,7 @@ OpenClaw → providers.cli-proxy → /v1/chat/completions → copilot-openai-pro
 ### 2.1 代理入口（模块化）
 
 ```text
-/Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs
+~/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs
 ```
 
 模块目录：
@@ -47,19 +47,19 @@ copilot-proxy/
 
 旧单文件（备份，可删）：
 ```text
-/Users/shuaihui/.openclaw/scripts/copilot-openai-proxy.mjs
+~/.openclaw/scripts/copilot-openai-proxy.mjs
 ```
 
 ### 2.2 OpenClaw 主配置
 
 ```text
-/Users/shuaihui/.openclaw/openclaw.json
+~/.openclaw/openclaw.json
 ```
 
 ### 2.3 本技能文档
 
 ```text
-/Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/SKILL.md
+~/.openclaw/workspace/skills/copilot-openai-proxy/SKILL.md
 ```
 
 ---
@@ -69,7 +69,7 @@ copilot-proxy/
 ### 3.1 必需 npm 包
 
 ```bash
-cd /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy
+cd ~/.openclaw/workspace/skills/copilot-openai-proxy
 npm install @github/copilot-sdk@0.2.2
 ```
 
@@ -82,7 +82,7 @@ npm install @github/copilot-sdk@0.2.2
 ### 4.1 手动启动
 
 ```bash
-node /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs --host 127.0.0.1 --port 3456
+node ~/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs --host 127.0.0.1 --port 3456
 ```
 
 ### 4.2 推荐常驻方式（launchd）
@@ -92,9 +92,9 @@ node /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/copilot-pro
 当前稳定方案：
 
 - LaunchAgent：`~/Library/LaunchAgents/ai.openclaw.copilot-openai-proxy.plist`
-- 启动脚本：`/Users/shuaihui/.openclaw/bin/start-copilot-openai-proxy.sh`（指向 skills 目录入口）
-- stdout：`/Users/shuaihui/.openclaw/logs/copilot-openai-proxy.stdout.log`
-- stderr：`/Users/shuaihui/.openclaw/logs/copilot-openai-proxy.stderr.log`
+- 启动脚本：`~/.openclaw/bin/start-copilot-openai-proxy.sh`（指向 skills 目录入口）
+- stdout：`~/.openclaw/logs/copilot-openai-proxy.stdout.log`
+- stderr：`~/.openclaw/logs/copilot-openai-proxy.stderr.log`
 
 常用命令：
 
@@ -108,7 +108,7 @@ launchctl kickstart -k gui/$(id -u)/ai.openclaw.copilot-openai-proxy
 当前还配了一层 watcher：
 
 - LaunchAgent：`~/Library/LaunchAgents/ai.openclaw.copilot-openai-proxy.watch.plist`
-- 检查脚本：`/Users/shuaihui/.openclaw/bin/copilot-openai-proxy-watch.sh`
+- 检查脚本：`~/.openclaw/bin/copilot-openai-proxy-watch.sh`
 - daemon 源脚本：`skills/copilot-openai-proxy/daemon/`（start.sh / watch.sh / healthcheck.sh）
 
 职责：
@@ -123,7 +123,7 @@ launchctl kickstart -k gui/$(id -u)/ai.openclaw.copilot-openai-proxy
 --host 127.0.0.1
 --port 3456
 --default-model claude-sonnet-4.6   # 默认值；可改为 gpt-5.4 等
---cwd /Users/shuaihui/.openclaw/workspace
+--cwd ~/.openclaw/workspace
 --session-ttl-ms 1800000             # 默认 30 分钟
 --send-timeout-ms 1800000            # 默认 6 分钟（DEFAULTS）；start.sh 设 30 分钟
 --turn-event-timeout-ms 180000       # 默认 180 秒；工具执行中有心跳推送，可适当调大
@@ -272,14 +272,14 @@ DELETE /debug/sessions/:key
 ### 8.1 语法检查
 
 ```bash
-cd /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy
+cd ~/.openclaw/workspace/skills/copilot-openai-proxy
 for f in copilot-proxy/*.mjs; do node --check "$f" && echo "$f OK"; done
 ```
 
 ### 8.2 启动代理
 
 ```bash
-node /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs --port 3456
+node ~/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs --port 3456
 ```
 
 ### 8.3 健康检查
@@ -406,7 +406,7 @@ openclaw doctor
 当前已通过 launchd 常驻，无需手动补：
 
 - LaunchAgent：`~/Library/LaunchAgents/ai.openclaw.copilot-openai-proxy.plist`
-- 启动脚本：`/Users/shuaihui/.openclaw/bin/start-copilot-openai-proxy.sh`
+- 启动脚本：`~/.openclaw/bin/start-copilot-openai-proxy.sh`
 - 日志：`~/.openclaw/logs/copilot-openai-proxy.stdout.log` / `stderr.log`
 - Watcher：`~/Library/LaunchAgents/ai.openclaw.copilot-openai-proxy.watch.plist`
 
@@ -485,7 +485,7 @@ openclaw doctor
 本次改造前的恢复链路已单独备份：
 
 ```text
-/Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/backup/2026-04-23-zero-auto-replay/
+~/.openclaw/workspace/skills/copilot-openai-proxy/backup/2026-04-23-zero-auto-replay/
 ```
 
 当前已备份文件：
