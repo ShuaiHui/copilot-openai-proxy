@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 URL="http://127.0.0.1:3456/health"
-STATE_DIR="/Users/shuaihui/.openclaw/run"
+STATE_DIR="$HOME/.openclaw/run"
 FAIL_FILE="$STATE_DIR/copilot-openai-proxy.fail"
 STAMP_FILE="$STATE_DIR/copilot-openai-proxy.last_ok"
 mkdir -p "$STATE_DIR"

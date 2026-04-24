@@ -1,146 +1,185 @@
-# Copilot OpenAI Proxy
+# copilot-openai-proxy
 
-## 这是什么
+A lightweight local proxy that wraps GitHub Copilot as an **OpenAI-compatible HTTP API**, so tools like [OpenClaw](https://openclaw.ai) can use Copilot-backed models (GPT-5.4, Claude Sonnet 4.6, etc.) via standard `/v1/chat/completions` calls.
 
-GitHub Copilot 订阅里包含了 `gpt-5.4`、`claude-sonnet-4.6`、`claude-opus-4.7` 这些高端模型，但没有直接的 API 入口。这个技能的作用是：
+---
 
-**在本地启动一个 HTTP 服务，把 Copilot 包装成标准 OpenAI 格式的接口，让 OpenClaw 能像用普通 API 一样调用 Copilot 模型。**
-
-整条链路长这样：
+## How It Works
 
 ```
-你发消息
-  → OpenClaw 路由到 copilot-proxy provider
-    → 请求发到本地 http://127.0.0.1:3456
-      → copilot-proxy/index.mjs 处理
-        → 通过 @github/copilot-sdk 转发给 GitHub Copilot
-          → 返回结果
+Your request
+  → OpenClaw routes to copilot-proxy provider
+    → HTTP POST to http://127.0.0.1:3456/v1/chat/completions
+      → copilot-proxy/index.mjs
+        → @github/copilot-sdk (stdio to Copilot CLI)
+          → GitHub Copilot backend
+            → streamed response
+```
+
+The proxy handles session lifecycle, streaming, tool calls, image attachments, and request metrics — all translated to/from the OpenAI wire format.
+
+---
+
+## Prerequisites
+
+1. **GitHub Copilot CLI** installed at `/opt/homebrew/bin/copilot` (or on `$PATH`)
+2. **Logged in** to GitHub with an active Copilot subscription
+3. **Node.js** v18+ (tested on v20/v25)
+
+---
+
+## Installation
+
+```bash
+cd ~/.openclaw/workspace/skills/copilot-openai-proxy
+npm install
 ```
 
 ---
 
-## 使用前提
+## Starting the Proxy
 
-1. 已安装 GitHub Copilot CLI（路径：`/opt/homebrew/bin/copilot`）
-2. 已登录 GitHub 账号并激活 Copilot 订阅
-3. 已安装依赖包（只需装一次）：
+### Option A: launchd daemon (macOS, recommended)
 
-```bash
-cd /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy
-npm install @github/copilot-sdk@0.2.2
-```
-
----
-
-## 启动方式
-
-### 方式一：launchd 常驻（推荐，已部署）
-
-代理通过 launchd 自动常驻，开机自启，无需手动干预：
+The included daemon scripts can be registered with launchd for auto-start on login.
 
 ```bash
-# 检查状态
-launchctl print gui/$(id -u)/ai.openclaw.copilot-openai-proxy | head -30
+# Load the service
+launchctl load ~/Library/LaunchAgents/ai.openclaw.copilot-openai-proxy.plist
 
-# 重启服务
+# Check status
+launchctl print gui/$(id -u)/ai.openclaw.copilot-openai-proxy | head -20
+
+# Restart
 launchctl kickstart -k gui/$(id -u)/ai.openclaw.copilot-openai-proxy
 ```
 
-日志位置：
-
+Logs are written to:
 ```
 ~/.openclaw/logs/copilot-openai-proxy.stdout.log
 ~/.openclaw/logs/copilot-openai-proxy.stderr.log
 ```
 
-### 方式二：手动临时启动
+### Option B: Manual / foreground
 
 ```bash
-node /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy/copilot-proxy/index.mjs \
+node ./copilot-proxy/index.mjs \
   --host 127.0.0.1 \
-  --port 3456
+  --port 3456 \
+  --default-model claude-sonnet-4.6
 ```
 
-验证是否正常：
+Available CLI flags:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--host` | `127.0.0.1` | Bind address |
+| `--port` | `3456` | Listen port |
+| `--default-model` | `claude-sonnet-4.6` | Model used when none is specified |
+| `--session-ttl-ms` | `1800000` | Idle session expiry (ms) |
+| `--send-timeout-ms` | `1800000` | Max time per send (ms) |
+| `--turn-event-timeout-ms` | `180000` | Turn event silence timeout (ms) |
+| `--cwd` | process cwd | Working directory passed to Copilot |
+
+---
+
+## Verifying It Works
 
 ```bash
-# 检查服务是否活着
+# Health check
 curl http://127.0.0.1:3456/health
 
-# 查看可用模型
-curl http://127.0.0.1:3456/v1/models
+# List available models
+curl http://127.0.0.1:3456/v1/models | jq .
+
+# Quick chat test
+curl http://127.0.0.1:3456/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-4.6","messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ---
 
-## 在 OpenClaw 里切换到 Copilot 模型
+## Integrating with OpenClaw
 
-代理启动后，直接用 `/model` 命令切换：
+Add the provider to your `openclaw.json`:
+
+```json
+{
+  "models": {
+    "providers": {
+      "copilot-proxy": {
+        "type": "openai-compat",
+        "baseUrl": "http://127.0.0.1:3456/v1",
+        "apiKey": "none",
+        "models": {
+          "gpt-5.4":          { "label": "GPT-5.4 (Copilot)" },
+          "gpt-5.4-mini":     { "label": "GPT-5.4 Mini (Copilot)" },
+          "claude-sonnet-4.6":{ "label": "Claude Sonnet 4.6 (Copilot)" }
+        }
+      }
+    }
+  }
+}
+```
+
+Then switch models in OpenClaw:
 
 ```
 /model copilot-proxy/gpt-5.4
-/model copilot-proxy/gpt-5.4-mini
 /model copilot-proxy/claude-sonnet-4.6
 ```
 
-切回默认模型：
+---
 
-```
-/model cli-proxy/gemini-3-flash-preview
-```
+## File Structure
+
+| Path | Description |
+|------|-------------|
+| `copilot-proxy/index.mjs` | HTTP server + request router |
+| `copilot-proxy/config.mjs` | CLI argument parsing + defaults |
+| `copilot-proxy/session.mjs` | Session lifecycle (create/reuse/expire) |
+| `copilot-proxy/messages.mjs` | OpenAI → Copilot message conversion |
+| `copilot-proxy/tools.mjs` | Tool call serialization/deserialization |
+| `copilot-proxy/image.mjs` | Image attachment handling |
+| `copilot-proxy/timeout.mjs` | Per-turn timeout + watchdog |
+| `copilot-proxy/events.mjs` | Turn event queue |
+| `copilot-proxy/logger.mjs` | Structured JSON logger (`LOG_LEVEL` env) |
+| `copilot-proxy/errors.mjs` | Standardized error response builders |
+| `copilot-proxy/db.mjs` | SQLite request log (`~/.openclaw/logs/copilot-proxy.db`) |
+| `copilot-proxy/metrics.mjs` | In-memory request counters + `/metrics` endpoint |
+| `daemon/start.sh` | Startup script template (copy to `~/.openclaw/bin/`) |
+| `daemon/watch.sh` | Health-watcher script template |
+| `daemon/healthcheck.sh` | One-shot health check script |
 
 ---
 
-## 文件在哪
+## Troubleshooting
 
-| 文件 | 说明 |
-|------|------|
-| `copilot-proxy/index.mjs` | 代理入口 + HTTP server |
-| `copilot-proxy/config.mjs` | 参数默认值 + CLI 解析 |
-| `copilot-proxy/errors.mjs` | 统一错误响应构建（`badRequest/notFound/payloadTooLarge/serverError`） |
-| `copilot-proxy/session.mjs` | Session 生命周期管理 |
-| `copilot-proxy/messages.mjs` | 消息解析 + prompt 构建 |
-| `copilot-proxy/tools.mjs` | tool call 处理 |
-| `copilot-proxy/image.mjs` | 图片附件处理 |
-| `copilot-proxy/timeout.mjs` | 超时控制 + 工具心跳推送 |
-| `copilot-proxy/events.mjs` | turn 事件队列（内部调用 logger） |
-| `copilot-proxy/logger.mjs` | 结构化 JSON 日志，`LOG_LEVEL` 控制粒度，info→stdout / warn+error→stderr |
-| `copilot-proxy/db.mjs` | SQLite 持久化请求记录（`~/.openclaw/logs/copilot-proxy.db`） |
-| `copilot-proxy/metrics.mjs` | 请求计数 / 延迟统计，供 `/metrics` 端点使用 |
-| `daemon/start.sh` | 启动脚本源模板（launchd 实际用 `~/.openclaw/bin/start-copilot-openai-proxy.sh`） |
-| `daemon/watch.sh` | watcher 脚本源模板（launchd 实际用 `~/.openclaw/bin/copilot-openai-proxy-watch.sh`） |
-| `daemon/healthcheck.sh` | 单次健康检查脚本 |
-| `node_modules/` | 本地 npm 依赖（@github/copilot-sdk） |
+**`Cannot find module '@github/copilot-sdk'`**
+Run `npm install` in the project root.
+
+**`/health` returns connection refused**
+The proxy is not running. Start it manually or check your launchd plist.
+
+**Requests time out after model switch**
+The Copilot CLI session may have expired. Re-run the CLI binary to re-authenticate.
+
+**Service doesn't start after reboot**
+Check that the plist is loaded: `launchctl list | grep copilot`. If missing, reload with `launchctl load`.
 
 ---
 
-## 常见问题
+## Technical Notes
 
-**Q: 代理启动报错 `Cannot find module '@github/copilot-sdk'`**
-
-原因：依赖没装。重新跑：
-```bash
-cd /Users/shuaihui/.openclaw/workspace/skills/copilot-openai-proxy
-npm install @github/copilot-sdk@0.2.2
-```
-
-**Q: curl /health 没有响应**
-
-原因：代理没有在跑。检查 launchd 状态或手动启动。
-
-**Q: 模型切换后请求超时或报错**
-
-原因：Copilot CLI 可能需要重新登录。跑 `/opt/homebrew/bin/copilot` 检查登录状态。
-
-**Q: 机器重启后模型不可用**
-
-launchd 会自动拉起。若服务异常，运行：
-```bash
-launchctl kickstart -k gui/$(id -u)/ai.openclaw.copilot-openai-proxy
-```
+- **Token counting**: Copilot is billed per-request, not per-token. The proxy returns `prompt_tokens: 0 / completion_tokens: 0` in usage fields; actual counts are emitted as `debug` logs.
+- **Session reuse**: Copilot sessions are stateful. The proxy maintains a session pool keyed by model + conversation context, with configurable TTL.
+- **Streaming**: All responses are streamed via SSE (`text/event-stream`), with the proxy performing event → OpenAI delta translation.
+- **Tool calls**: Parallel tool calls are supported. Results are batched and injected as `tool` role messages.
+- **Image support**: Base64-encoded images in `content` arrays are forwarded to Copilot's vision-capable models.
 
 ---
 
-## 技术细节
+## License
 
-详见 [SKILL.md](./SKILL.md)，包含 SDK 坑点、OpenClaw 配置结构、接口文档、session 请求特性和调试方法。
+MIT
